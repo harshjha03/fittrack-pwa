@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>FitTrack</title>
+<meta name="theme-color" content="#101216" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="FitTrack" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" href="icon-192.png" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap');
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; margin: 0; }
+  html, body { background: #101216; overscroll-behavior-y: none; }
+  input, select, button { outline: none; font-family: inherit; }
+  input[type=range] { width: 100%; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js" integrity="sha512-QVs8Lo43F9lSuBykadDb0oSXDL/BbZ588urWVCRwSIoewQv/Ewg1f84mK3U790bZ0FfhFa1YSQUmIhG+pIRKeg==" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js" integrity="sha512-6a1107rTlA4gYpgHAqbwLAtxmWipBdJFcq8y5S/aTge3Bp+VAklABm2LO+Kg51vOWR9JMZq1Ovjl5tpluNpTeQ==" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/htm/3.1.1/htm.min.js" integrity="sha512-KexadEzXSG37kmTjpJaBzflzUoGFDyXbhVCcvYmLQtR/P0b5WYZZi8kPXc2cYcmI+c1gqxnknlF+fuwYQbZVvg==" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>
+"use strict";
+const { useState, useEffect, useRef, useMemo, createElement } = React;
+const html = htm.bind(createElement);
+
+/* ---------------- tokens ---------------- */
+const C = { ink:"#101216", panel:"#1A1D23", panel2:"#22262E", line:"#2A2E36",
+  chalk:"#ECE9E2", dim:"#8B9099", gold:"#F0A526", green:"#6FBF73", red:"#E06C5B" };
+const FONT_HEAD = "'Barlow Condensed','Arial Narrow',sans-serif";
+const FONT_BODY = "system-ui,-apple-system,'Segoe UI',sans-serif";
+
+/* ---------------- plan from workout.md ---------------- */
+const DEFAULT_PLAN = {
+  upperA: { label:"Upper A", muscles:"Chest · Triceps · Delts · Back · Biceps", exercises:[
+    { name:"Barbell bench press", target:"Chest", sets:4, reps:"6-8", weight:20 },
+    { name:"Seated row", target:"Back", sets:4, reps:"8-10", weight:32.5 },
+    { name:"Machine shoulder press", target:"Delts", sets:3, reps:"8-10", weight:30 },
+    { name:"Lat pulldown", target:"Lats", sets:3, reps:"10-12", weight:32.5 },
+    { name:"Incline DB press", target:"Upper chest", sets:3, reps:"10-12", weight:10 },
+    { name:"Butterfly / pec deck", target:"Chest", sets:3, reps:"12-15", weight:25 },
+    { name:"Lateral raise", target:"Side delts", sets:3, reps:"15", weight:5 },
+    { name:"Rope pushdown", target:"Triceps", sets:3, reps:"12", weight:15 },
+    { name:"Preacher curl", target:"Biceps", sets:3, reps:"10", weight:15 } ] },
+  lowerA: { label:"Lower A", muscles:"Quads · Glutes · Hamstrings", exercises:[
+    { name:"Goblet squat", target:"Quads", sets:4, reps:"10-12", weight:12 },
+    { name:"Leg press", target:"Quads", sets:4, reps:"12-15", weight:40 },
+    { name:"Bulgarian split squat", target:"Quads/Glutes", sets:3, reps:"10/leg", weight:0 },
+    { name:"Leg extension", target:"Quads", sets:3, reps:"15", weight:20 },
+    { name:"Seated leg curl", target:"Hamstrings", sets:3, reps:"12", weight:25 },
+    { name:"Wall sit", target:"Knee stability", sets:3, reps:"30s", weight:0 } ] },
+  rest: { label:"Rest", muscles:"Walk. Nothing else.", exercises:[] },
+  upperB: { label:"Upper B", muscles:"Back & Lats · Biceps · Upper chest", exercises:[
+    { name:"Assisted pull-up", target:"Lats", sets:4, reps:"6-10", weight:0 },
+    { name:"Incline barbell press", target:"Upper chest", sets:4, reps:"8-10", weight:20 },
+    { name:"Single-arm DB row", target:"Back", sets:4, reps:"10/arm", weight:14 },
+    { name:"Machine chest press", target:"Chest", sets:3, reps:"10-12", weight:30 },
+    { name:"Seated row", target:"Back", sets:3, reps:"12", weight:32.5 },
+    { name:"Face pulls", target:"Rear delts", sets:3, reps:"15", weight:10 },
+    { name:"EZ-bar curl", target:"Biceps", sets:3, reps:"10", weight:15 },
+    { name:"Rope overhead extension", target:"Triceps", sets:3, reps:"12", weight:15 } ] },
+  lowerB: { label:"Lower B", muscles:"Glutes · Hamstrings · Lower back · Core", exercises:[
+    { name:"Hip thrust", target:"Glutes", sets:4, reps:"10-12", weight:20 },
+    { name:"Seated leg curl", target:"Hamstrings", sets:4, reps:"12", weight:25 },
+    { name:"Cable pull-through", target:"Glutes/Hinge", sets:4, reps:"15", weight:20 },
+    { name:"Back extension 45\u00B0", target:"Lower back", sets:3, reps:"12", weight:0 },
+    { name:"Reverse lunge", target:"Glutes/Quads", sets:3, reps:"10/leg", weight:0 },
+    { name:"Dead bug + side plank", target:"Core", sets:3, reps:"\u2014", weight:0 } ] },
+  cricket: { label:"Cricket", muscles:"Bowling shoulder · conditioning", exercises:[
+    { name:"External rotations (pre-bowl)", target:"Rotator cuff", sets:2, reps:"15/arm", weight:2 } ] },
+  upperC: { label:"Upper C", muscles:"Biceps & Triceps · Side delts · Volume", exercises:[
+    { name:"Flat DB press", target:"Chest", sets:4, reps:"10-12", weight:12 },
+    { name:"Seated row", target:"Back", sets:4, reps:"10-12", weight:30 },
+    { name:"Lat pulldown", target:"Lats", sets:3, reps:"12", weight:30 },
+    { name:"Machine shoulder press", target:"Delts", sets:3, reps:"12", weight:27.5 },
+    { name:"Cable fly", target:"Chest", sets:3, reps:"15", weight:25 },
+    { name:"Lateral raise", target:"Side delts", sets:4, reps:"15-20", weight:5 },
+    { name:"DB curl", target:"Biceps", sets:3, reps:"12", weight:8 },
+    { name:"Preacher curl", target:"Biceps", sets:3, reps:"12", weight:15 },
+    { name:"Rope pushdown", target:"Triceps", sets:3, reps:"12", weight:15 },
+    { name:"Overhead extension", target:"Triceps", sets:3, reps:"12", weight:15 } ] },
+};
+const DAY_MAP = ["upperC","upperA","lowerA","rest","upperB","lowerB","cricket"]; // Sun..Sat
+
+/* ---------------- meals from diet.md ---------------- */
+const MEALS = [
+  { id:"banana", time:"7:05", name:"Banana + black coffee", p:1, kcal:110 },
+  { id:"oats", time:"9:10", name:"Oats + milk + whey + flaxseed", p:51, kcal:560 },
+  { id:"eggs1", time:"11:30", name:"3 boiled eggs", p:18, kcal:235 },
+  { id:"lunch", time:"1:30", name:"PG lunch \u2014 3 roti + dal + sabzi + lemon salad", p:20, kcal:530 },
+  { id:"eggs2", time:"5:00", name:"3 boiled eggs + 200g papaya", p:19, kcal:320 },
+  { id:"dinner", time:"8:30", name:"Dinner + PG rice + dal", p:42, kcal:700 },
+  { id:"milk", time:"10:30", name:"200ml milk + 6 almonds", p:8, kcal:155 },
+];
+const DINNER_BY_DAY = [
+  "Sun \u2014 cook: paneer-soya MATAR (double batch)",
+  "Mon \u2014 reheat Sunday's leftovers",
+  "Tue \u2014 raw paneer cubes + PG dinner",
+  "Wed \u2014 raw paneer cubes + PG dinner",
+  "Thu \u2014 raw paneer cubes + PG dinner",
+  "Fri \u2014 cook: paneer-soya BHURJI",
+  "Sat \u2014 cook: paneer-soya BEANS",
+];
+const CHECKLIST = [
+  { id:"eggs6", label:"6 eggs (3 + 3)" },
+  { id:"whey", label:"Whey (in the oats)" },
+  { id:"flax", label:"Flaxseed, ground" },
+  { id:"water", label:"4L water" },
+  { id:"lemon", label:"Lemon on salad" },
+  { id:"sleep", label:"7+ hrs sleep last night" },
+];
+const KEY_LIFTS = ["Barbell bench press","Lat pulldown","Goblet squat","Hip thrust"];
+const STORE_KEY = "fittrack_v1";
+
+/* ---------------- helpers ---------------- */
+const pad = n => String(n).padStart(2,"0");
+const dateStr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const dayName = ds => ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(ds+"T12:00").getDay()];
+const emptyLog = () => ({ session:null, sets:{}, meals:{}, checks:{}, pain:{knee:0, back:0} });
+
+function loadState(){
+  let parsed = null;
+  try { const raw = localStorage.getItem(STORE_KEY); if(raw) parsed = JSON.parse(raw); } catch(e){}
+  // merge over defaults so fields added in later versions always exist
+  return { plan: DEFAULT_PLAN, logs:{}, metrics:[], baseline:null, ...(parsed||{}) };
+}
+
+/* ============================================================= */
+function App(){
+  const [tab, setTab] = useState("today");
+  const [state, setState] = useState(loadState);
+  const [editMode, setEditMode] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const [today, setToday] = useState(dateStr(new Date()));
+  const saveTimer = useRef(null);
+
+  /* date rollover: re-check whenever app becomes visible + every minute */
+  useEffect(() => {
+    const check = () => { const d = dateStr(new Date()); setToday(t => t === d ? t : d); };
+    const iv = setInterval(check, 60000);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => { clearInterval(iv); document.removeEventListener("visibilitychange", check); window.removeEventListener("focus", check); };
+  }, []);
+
+  /* persist */
+  useEffect(() => {
+    const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e){ console.error(e); } };
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(save, 400);
+    /* flush immediately if the app is backgrounded/closed before the debounce fires */
+    const flush = () => { if(document.visibilityState === "hidden"){ clearTimeout(saveTimer.current); save(); } };
+    document.addEventListener("visibilitychange", flush);
+    return () => document.removeEventListener("visibilitychange", flush);
+  }, [state]);
+
+  const date = today;
+  const dow = new Date(date+"T12:00").getDay();
+  const log = {...emptyLog(), ...(state.logs[date]||{})};
+  const sessionKey = log.session || DAY_MAP[dow];
+  const session = state.plan[sessionKey];
+
+  const patchLog = fn => setState(s => {
+    const cur = {...emptyLog(), ...(s.logs[date]||{})};
+    return {...s, logs:{...s.logs, [date]: fn(cur)}};
+  });
+
+  const mealP = MEALS.reduce((a,m)=>a+(log.meals[m.id]?m.p:0),0);
+  const mealK = MEALS.reduce((a,m)=>a+(log.meals[m.id]?m.kcal:0),0);
+  const setsLogged = Object.values(log.sets).reduce((a,arr)=>a+arr.length,0);
+
+  return html`
+    <div style=${{minHeight:"100vh", background:C.ink, display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto", fontFamily:FONT_BODY, color:C.chalk}}>
+      <header style=${{padding:"calc(env(safe-area-inset-top) + 14px) 16px 10px", borderBottom:`1px solid ${C.line}`}}>
+        <div style=${{display:"flex", justifyContent:"space-between", alignItems:"baseline"}}>
+          <h1 style=${{fontFamily:FONT_HEAD, fontWeight:700, fontSize:30, letterSpacing:1, color:C.chalk, margin:0, textTransform:"uppercase"}}>
+            Fit<span style=${{color:C.gold}}>Track</span>
+          </h1>
+          <span style=${{fontSize:12, color:C.dim}}>${dayName(date)} · ${date.slice(5)}</span>
+        </div>
+        <div style=${{display:"flex", gap:4, marginTop:12}}>
+          ${["S","M","T","W","T","F","S"].map((d,i)=>{
+            const k = DAY_MAP[i]; const isToday = i===dow;
+            return html`<div key=${i} style=${{flex:1, textAlign:"center", padding:"5px 0", borderRadius:6,
+              background:isToday?C.gold:C.panel, color:isToday?C.ink:C.dim,
+              fontFamily:FONT_HEAD, fontSize:13, fontWeight:600, letterSpacing:0.5}}>
+              <div>${d}</div>
+              <div style=${{fontSize:9, textTransform:"uppercase", opacity:0.85}}>
+                ${state.plan[k].label.replace("Upper ","U").replace("Lower ","L")}
+              </div>
+            </div>`;})}
+        </div>
+      </header>
+
+      <main style=${{flex:1, overflowY:"auto", padding:"14px 14px 100px"}}>
+        ${tab==="today" && html`<${TodayTab} session=${session} sessionKey=${sessionKey} log=${log} patchLog=${patchLog}
+            editMode=${editMode} setEditMode=${setEditMode} expanded=${expanded} setExpanded=${setExpanded}
+            state=${state} setState=${setState} setsLogged=${setsLogged} />`}
+        ${tab==="meals" && html`<${MealsTab} log=${log} patchLog=${patchLog} dow=${dow} mealP=${mealP} mealK=${mealK} />`}
+        ${tab==="progress" && html`<${ProgressTab} state=${state} setState=${setState} date=${date} />`}
+        ${tab==="plan" && html`<${PlanTab} state=${state} setState=${setState} />`}
+      </main>
+
+      <nav style=${{position:"fixed", bottom:0, left:0, right:0, display:"flex", background:C.panel,
+          borderTop:`1px solid ${C.line}`, paddingBottom:"env(safe-area-inset-bottom)", maxWidth:480, margin:"0 auto"}}>
+        ${[["today","Today"],["meals","Meals"],["progress","Progress"],["plan","Plan"]].map(([k,l]) => html`
+          <button key=${k} onClick=${()=>setTab(k)} style=${{flex:1, padding:"14px 0 12px", background:"none", border:"none",
+            fontFamily:FONT_HEAD, fontSize:16, fontWeight:600, letterSpacing:1, textTransform:"uppercase",
+            color:tab===k?C.gold:C.dim, borderTop:tab===k?`2px solid ${C.gold}`:"2px solid transparent", cursor:"pointer"}}>
+            ${l}
+          </button>`)}
+      </nav>
+    </div>`;
+}
+
+/* ---------------- Today ---------------- */
+function TodayTab({session, sessionKey, log, patchLog, editMode, setEditMode, expanded, setExpanded, state, setState, setsLogged}){
+  const swap = k => patchLog(c => ({...c, session:k, sets:{}}));
+  /* sets keyed by exercise name so plan edits/reorders can't misattribute logged sets */
+  const logSet = (name,s) => patchLog(c => { const sets={...c.sets}; sets[name]=[...(sets[name]||[]),s]; return {...c, sets}; });
+  const removeSet = (name,si) => patchLog(c => { const sets={...c.sets}; sets[name]=(sets[name]||[]).filter((_,j)=>j!==si); return {...c, sets}; });
+
+  const addExercise = () => {
+    const name = prompt("Exercise name?"); if(!name) return;
+    setState(s => { const plan={...s.plan}; const day={...plan[sessionKey]};
+      day.exercises=[...day.exercises,{name, target:"Custom", sets:3, reps:"10", weight:0}];
+      plan[sessionKey]=day; return {...s, plan}; });
+  };
+  const removeExercise = idx => setState(s => { const plan={...s.plan}; const day={...plan[sessionKey]};
+    day.exercises=day.exercises.filter((_,i)=>i!==idx); plan[sessionKey]=day; return {...s, plan}; });
+
+  return html`<div>
+    <div style=${{display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:4}}>
+      <div>
+        <div style=${{fontFamily:FONT_HEAD, fontSize:40, fontWeight:700, textTransform:"uppercase", lineHeight:1, color:C.chalk}}>${session.label}</div>
+        <div style=${{fontSize:12, color:C.gold, marginTop:4}}>${session.muscles}</div>
+      </div>
+      <div style=${{textAlign:"right"}}>
+        <div style=${{fontFamily:FONT_HEAD, fontSize:26, fontWeight:700, color:setsLogged?C.green:C.dim}}>${setsLogged}</div>
+        <div style=${{fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:1}}>sets logged</div>
+      </div>
+    </div>
+
+    <div style=${{display:"flex", gap:8, margin:"12px 0"}}>
+      <select value=${sessionKey} onChange=${e=>swap(e.target.value)}
+        style=${{flex:1, background:C.panel, color:C.chalk, border:`1px solid ${C.line}`, borderRadius:8, padding:"10px 12px", fontSize:14}}>
+        ${Object.entries(state.plan).map(([k,v])=>html`<option key=${k} value=${k}>${v.label}</option>`)}
+      </select>
+      <button onClick=${()=>setEditMode(!editMode)} style=${{background:editMode?C.gold:C.panel, color:editMode?C.ink:C.chalk,
+        border:`1px solid ${editMode?C.gold:C.line}`, borderRadius:8, padding:"10px 16px", fontFamily:FONT_HEAD,
+        fontWeight:600, fontSize:15, textTransform:"uppercase", letterSpacing:1, cursor:"pointer"}}>
+        ${editMode?"Done":"Edit"}
+      </button>
+    </div>
+
+    ${sessionKey==="rest" && html`<${Card}><p style=${{margin:0,color:C.dim,fontSize:14}}>Rest day. Walk. Nothing else. Eggs still get boiled tonight.</p><//>`}
+    ${sessionKey==="cricket" && html`<${Card}><p style=${{margin:0,color:C.dim,fontSize:14}}>Bowling is training load, not rest. External rotations \u00D715 each arm before bowling, then 10\u201312 building run-ups before full pace.</p><//>`}
+
+    ${session.exercises.map((ex,i)=>html`<${ExerciseCard} key=${sessionKey+"-"+i} ex=${ex} sets=${log.sets[ex.name]||log.sets[i]||[]}
+      open=${expanded===i} onToggle=${()=>setExpanded(expanded===i?null:i)}
+      onLog=${s=>logSet(ex.name,s)} onRemoveSet=${si=>removeSet(ex.name,si)}
+      editMode=${editMode} onRemoveEx=${()=>removeExercise(i)} />`)}
+
+    ${editMode && html`<button onClick=${addExercise} style=${{width:"100%", padding:14, background:"none",
+      border:`1px dashed ${C.gold}`, borderRadius:10, color:C.gold, fontFamily:FONT_HEAD, fontSize:16,
+      fontWeight:600, textTransform:"uppercase", letterSpacing:1, cursor:"pointer", marginTop:4}}>
+      + Add exercise to ${session.label}</button>`}
+
+    <${Card} style=${{marginTop:14}}>
+      <${SectionLabel}>Session pain check (0\u201310)<//>
+      ${["knee","back"].map(p=>html`<div key=${p} style=${{display:"flex", alignItems:"center", gap:10, marginTop:8}}>
+        <span style=${{width:46, fontSize:13, color:C.dim, textTransform:"capitalize"}}>${p}</span>
+        <input type="range" min="0" max="10" value=${log.pain[p]}
+          onChange=${e=>patchLog(c=>({...c, pain:{...c.pain, [p]:+e.target.value}}))}
+          style=${{flex:1, accentColor:log.pain[p]>3?C.red:C.green}} />
+        <span style=${{width:24, textAlign:"right", fontFamily:FONT_HEAD, fontSize:18, fontWeight:600, color:log.pain[p]>3?C.red:C.chalk}}>${log.pain[p]}</span>
+      </div>`)}
+      ${(log.pain.knee>3||log.pain.back>3) && html`<p style=${{fontSize:12, color:C.red, margin:"10px 0 0"}}>
+        Above 3: reduce load 20%. Sharp pain or pain lasting 24 hrs = stop.</p>`}
+    <//>
+  </div>`;
+}
+
+/* ---------------- Exercise card ---------------- */
+function ExerciseCard({ex, sets, open, onToggle, onLog, onRemoveSet, editMode, onRemoveEx}){
+  const last = sets[sets.length-1];
+  const [w,setW] = useState(last?last.w:ex.weight);
+  const [r,setR] = useState(last?last.r:8);
+  const [rir,setRir] = useState(3);
+  useEffect(()=>{ if(last){ setW(last.w); setR(last.r); } }, [sets.length]);
+  const done = sets.length >= ex.sets;
+
+  return html`<div style=${{background:C.panel, borderRadius:10, marginBottom:8, border:`1px solid ${done?C.green:C.line}`, overflow:"hidden"}}>
+    <div onClick=${onToggle} style=${{width:"100%", display:"flex", alignItems:"center", gap:10, padding:"12px 14px", cursor:"pointer"}}>
+      <div style=${{flex:1}}>
+        <div style=${{fontSize:15, fontWeight:600, color:C.chalk}}>${ex.name}</div>
+        <div style=${{fontSize:11, color:C.dim, marginTop:2}}>${ex.target} · ${ex.sets} \u00D7 ${ex.reps} @ ${ex.weight?ex.weight+"kg":"BW/TEST"}</div>
+      </div>
+      <div style=${{fontFamily:FONT_HEAD, fontSize:20, fontWeight:700, color:done?C.green:(sets.length?C.gold:C.dim)}}>${sets.length}/${ex.sets}</div>
+      ${editMode && html`<span onClick=${e=>{e.stopPropagation(); onRemoveEx();}} style=${{color:C.red, fontSize:18, padding:"0 4px"}}>\u2715</span>`}
+    </div>
+
+    ${open && html`<div style=${{padding:"0 14px 14px", borderTop:`1px solid ${C.line}`}}>
+      ${sets.map((s,si)=>html`<div key=${si} style=${{display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:`1px solid ${C.line}`}}>
+        <span style=${{fontFamily:FONT_HEAD, fontSize:15, color:C.dim, width:20}}>${si+1}</span>
+        <span style=${{fontFamily:FONT_HEAD, fontSize:20, fontWeight:600, color:C.chalk}}>${s.w}<span style=${{fontSize:12, color:C.dim}}>kg</span> \u00D7 ${s.r}</span>
+        <span style=${{fontSize:11, color:s.rir<=1?C.red:C.dim, marginLeft:"auto"}}>RIR ${s.rir}</span>
+        <button onClick=${()=>onRemoveSet(si)} style=${{background:"none", border:"none", color:C.dim, fontSize:15, cursor:"pointer"}}>\u2715</button>
+      </div>`)}
+
+      <div style=${{marginTop:12}}>
+        <${Stepper} label="Weight (kg)" value=${w} step=${2.5} onChange=${setW} big=${true} />
+        <${Stepper} label="Reps" value=${r} step=${1} onChange=${setR} />
+        <div style=${{margin:"10px 0"}}>
+          <span style=${{fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:1}}>Reps left in tank</span>
+          <div style=${{display:"flex", gap:6, marginTop:6}}>
+            ${[0,1,2,3,4].map(v=>html`<button key=${v} onClick=${()=>setRir(v)} style=${{flex:1, padding:"9px 0", borderRadius:7,
+              background:rir===v?(v<=1?C.red:C.gold):C.panel2, color:rir===v?C.ink:C.dim, border:"none",
+              fontFamily:FONT_HEAD, fontSize:16, fontWeight:700, cursor:"pointer"}}>${v===4?"4+":v}</button>`)}
+          </div>
+          ${rir<=1 && html`<p style=${{fontSize:11, color:C.red, margin:"6px 0 0"}}>Weeks 1\u20133 should stay at 3\u20134 in the tank.</p>`}
+        </div>
+        <button onClick=${()=>onLog({w,r,rir})} style=${{width:"100%", padding:14, borderRadius:8, border:"none",
+          background:C.gold, color:C.ink, fontFamily:FONT_HEAD, fontSize:18, fontWeight:700,
+          textTransform:"uppercase", letterSpacing:1, cursor:"pointer"}}>
+          Log set ${sets.length+1}
+        </button>
+      </div>
+    </div>`}
+  </div>`;
+}
+
+const stepBtnStyle = { width:52, height:44, borderRadius:8, border:`1px solid ${C.line}`, background:C.panel2, color:C.chalk, fontSize:24, fontWeight:600, cursor:"pointer" };
+
+function Stepper({label, value, step, onChange, big}){
+  return html`<div style=${{display:"flex", alignItems:"center", gap:10, marginBottom:8}}>
+    <span style=${{fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:1, width:84}}>${label}</span>
+    <button onClick=${()=>onChange(Math.max(0,+(value-step).toFixed(1)))} style=${stepBtnStyle}>\u2212</button>
+    <span style=${{flex:1, textAlign:"center", fontFamily:FONT_HEAD, fontSize:big?32:24, fontWeight:700, color:C.chalk}}>${value}</span>
+    <button onClick=${()=>onChange(+(value+step).toFixed(1))} style=${stepBtnStyle}>+</button>
+  </div>`;
+}
+
+/* ---------------- Meals ---------------- */
+function MealsTab({log, patchLog, dow, mealP, mealK}){
+  const toggleMeal = id => patchLog(c=>({...c, meals:{...c.meals, [id]:!c.meals[id]}}));
+  const toggleCheck = id => patchLog(c=>({...c, checks:{...c.checks, [id]:!c.checks[id]}}));
+
+  return html`<div>
+    <div style=${{display:"flex", gap:10, marginBottom:14}}>
+      <${Stat} label="Protein" value=${mealP+"g"} sub="/ 159g" pct=${mealP/159} />
+      <${Stat} label="Calories" value=${mealK} sub="/ 2510" pct=${mealK/2510} />
+    </div>
+
+    <${SectionLabel}>Meals \u2014 tick as eaten<//>
+    ${MEALS.map(m=>{
+      const on = !!log.meals[m.id];
+      return html`<div key=${m.id} onClick=${()=>toggleMeal(m.id)} style=${{width:"100%", display:"flex", alignItems:"center",
+        gap:12, padding:"12px 14px", background:C.panel, borderRadius:10, marginBottom:6,
+        border:`1px solid ${on?C.green:C.line}`, cursor:"pointer"}}>
+        <div style=${{width:22, height:22, borderRadius:6, flexShrink:0, background:on?C.green:"none",
+          border:`2px solid ${on?C.green:C.dim}`, display:"flex", alignItems:"center", justifyContent:"center",
+          color:C.ink, fontWeight:700, fontSize:14}}>${on?"\u2713":""}</div>
+        <div style=${{flex:1}}>
+          <div style=${{fontSize:14, fontWeight:600, color:on?C.chalk:C.dim}}>
+            <span style=${{color:C.gold, fontFamily:FONT_HEAD, marginRight:8}}>${m.time}</span>${m.name}
+          </div>
+          ${m.id==="dinner" && html`<div style=${{fontSize:11, color:C.gold, marginTop:2}}>${DINNER_BY_DAY[dow]}</div>`}
+        </div>
+        <div style=${{textAlign:"right", flexShrink:0}}>
+          <div style=${{fontFamily:FONT_HEAD, fontSize:17, fontWeight:700, color:on?C.green:C.dim}}>${m.p}g</div>
+          <div style=${{fontSize:10, color:C.dim}}>${m.kcal} kcal</div>
+        </div>
+      </div>`;})}
+
+    <${SectionLabel} style=${{marginTop:18}}>Daily non-negotiables<//>
+    <${Card}>
+      ${CHECKLIST.map(c=>{
+        const on = !!log.checks[c.id];
+        return html`<div key=${c.id} onClick=${()=>toggleCheck(c.id)} style=${{display:"flex", alignItems:"center", gap:10,
+          width:"100%", padding:"9px 0", borderBottom:`1px solid ${C.line}`, cursor:"pointer"}}>
+          <div style=${{width:18, height:18, borderRadius:5, background:on?C.gold:"none", border:`2px solid ${on?C.gold:C.dim}`,
+            color:C.ink, fontSize:12, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center"}}>${on?"\u2713":""}</div>
+          <span style=${{fontSize:14, color:on?C.chalk:C.dim}}>${c.label}</span>
+        </div>`;})}
+    <//>
+  </div>`;
+}
+
+/* ---------------- Progress ---------------- */
+function ProgressTab({state, setState, date}){
+  const [wt,setWt] = useState("");
+  const [waist,setWaist] = useState("");
+  const latest = state.metrics[state.metrics.length-1];
+  const startW = (state.baseline && state.baseline.weight) || 84;
+  const goalW = 78;
+  const curW = (latest && latest.weight) || startW;
+  const pct = Math.min(1, Math.max(0, (startW-curW)/(startW-goalW)));
+
+  const addEntry = () => {
+    if(!wt) return;
+    setState(s=>({...s,
+      baseline: s.baseline || {weight:+wt, waist:waist?+waist:null, date},
+      metrics: [...s.metrics, {date, weight:+wt, waist:waist?+waist:null}] }));
+    setWt(""); setWaist("");
+  };
+
+  const bests = useMemo(()=>{
+    const out = {}; KEY_LIFTS.forEach(l=>out[l]={first:null,best:null});
+    Object.keys(state.logs).sort().forEach(d=>{
+      const lg = state.logs[d];
+      const planDay = state.plan[lg.session || DAY_MAP[new Date(d+"T12:00").getDay()]];
+      if(!planDay) return;
+      planDay.exercises.forEach((ex,i)=>{
+        if(!KEY_LIFTS.includes(ex.name)) return;
+        (lg.sets[ex.name]||lg.sets[i]||[]).forEach(s=>{ /* index fallback reads pre-rename history */
+          const o = out[ex.name];
+          if(!o.first) o.first = {d, w:s.w, r:s.r};
+          if(!o.best || s.w>o.best.w || (s.w===o.best.w && s.r>o.best.r)) o.best = {d, w:s.w, r:s.r};
+        });
+      });
+    });
+    return out;
+  }, [state.logs, state.plan]);
+
+  const adherence = useMemo(()=>{
+    let mealPct=0, days=0, workouts=0;
+    for(let i=0;i<7;i++){
+      const d = new Date(); d.setDate(d.getDate()-i);
+      const ds = dateStr(d);
+      const lg = state.logs[ds];
+      if(!lg) continue;
+      days++;
+      mealPct += MEALS.filter(m=>lg.meals[m.id]).length / MEALS.length;
+      if(Object.keys(lg.sets).length>0) workouts++;
+    }
+    return { meals: days?Math.round((mealPct/days)*100):0, workouts };
+  }, [state.logs]);
+
+  return html`<div>
+    <${Card}>
+      <${SectionLabel}>Recomp goal \u2014 ${startW} kg \u2192 ${goalW} kg<//>
+      <div style=${{display:"flex", alignItems:"baseline", gap:8, margin:"8px 0"}}>
+        <span style=${{fontFamily:FONT_HEAD, fontSize:44, fontWeight:700, color:C.gold}}>${curW}</span>
+        <span style=${{fontSize:13, color:C.dim}}>kg now</span>
+        ${latest && latest.waist && html`<span style=${{marginLeft:"auto", fontSize:13, color:C.dim}}>waist ${latest.waist} cm</span>`}
+      </div>
+      <div style=${{height:10, background:C.panel2, borderRadius:5, overflow:"hidden"}}>
+        <div style=${{width:(pct*100)+"%", height:"100%", background:C.green, transition:"width .4s"}}></div>
+      </div>
+      <p style=${{fontSize:11, color:C.dim, margin:"8px 0 0"}}>Weeks 1\u20134 the scale barely moves and that's correct. Waist + lifts are the real signal.</p>
+    <//>
+
+    <${Card} style=${{marginTop:12}}>
+      <${SectionLabel}>Weekly check-in (morning, post-bathroom, pre-food)<//>
+      <div style=${{display:"flex", gap:8, marginTop:10}}>
+        <input value=${wt} onChange=${e=>setWt(e.target.value)} placeholder="Weight kg" inputMode="decimal" style=${inpStyle} />
+        <input value=${waist} onChange=${e=>setWaist(e.target.value)} placeholder="Waist cm" inputMode="decimal" style=${inpStyle} />
+        <button onClick=${addEntry} style=${{width:80, borderRadius:8, border:"none", background:C.gold, color:C.ink,
+          fontFamily:FONT_HEAD, fontSize:15, fontWeight:700, textTransform:"uppercase", cursor:"pointer"}}>Save</button>
+      </div>
+      ${state.metrics.slice(-4).reverse().map((m,i)=>html`<div key=${i} style=${{display:"flex", justifyContent:"space-between",
+        padding:"8px 0", borderBottom:`1px solid ${C.line}`, fontSize:13}}>
+        <span style=${{color:C.dim}}>${m.date}</span>
+        <span>${m.weight} kg${m.waist?` · ${m.waist} cm`:""}</span>
+      </div>`)}
+    <//>
+
+    <div style=${{display:"flex", gap:10, marginTop:12}}>
+      <${Stat} label="Meals, last 7d" value=${adherence.meals+"%"} sub="target 85%+" pct=${adherence.meals/100} />
+      <${Stat} label="Workouts, last 7d" value=${adherence.workouts} sub="/ 5" pct=${adherence.workouts/5} />
+    </div>
+
+    <${SectionLabel} style=${{marginTop:18}}>Key lifts \u2014 first vs best<//>
+    ${KEY_LIFTS.map(l=>{
+      const b = bests[l];
+      return html`<${Card} key=${l} style=${{marginBottom:8}}>
+        <div style=${{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+          <span style=${{fontSize:14, fontWeight:600}}>${l}</span>
+          ${b.best ? html`<span style=${{fontFamily:FONT_HEAD, fontSize:20, fontWeight:700, color:C.gold}}>
+              ${b.first && b.first.w!==b.best.w ? b.first.w+" \u2192 " : ""}${b.best.w}kg \u00D7 ${b.best.r}</span>`
+            : html`<span style=${{fontSize:12, color:C.dim}}>not logged yet</span>`}
+        </div>
+      <//>`;})}
+  </div>`;
+}
+
+const inpStyle = { flex:1, background:C.panel2, border:`1px solid ${C.line}`, borderRadius:8, padding:"12px 12px", color:C.chalk, fontSize:15, minWidth:0 };
+
+/* ---------------- Plan ---------------- */
+function PlanTab({state, setState}){
+  const [day,setDay] = useState("upperA");
+  const d = state.plan[day];
+
+  const patch = (i, field, val) => setState(s=>{
+    const plan = {...s.plan}; const dd = {...plan[day]};
+    dd.exercises = dd.exercises.map((e,j)=>j===i?{...e,[field]:val}:e);
+    plan[day]=dd; return {...s, plan};
+  });
+
+  const reset = () => {
+    if(confirm("Reset the entire plan to the original workout.md defaults? Logs are kept.")){
+      setState(s=>({...s, plan:DEFAULT_PLAN}));
+    }
+  };
+
+  return html`<div>
+    <${SectionLabel}>Edit the template \u2014 changes apply every week<//>
+    <select value=${day} onChange=${e=>setDay(e.target.value)} style=${{...inpStyle, width:"100%", marginTop:8}}>
+      ${Object.entries(state.plan).map(([k,v])=>html`<option key=${k} value=${k}>${v.label} \u2014 ${v.muscles}</option>`)}
+    </select>
+
+    ${d.exercises.map((ex,i)=>html`<${Card} key=${day+"-"+i} style=${{marginTop:8}}>
+      <input value=${ex.name} onChange=${e=>patch(i,"name",e.target.value)}
+        style=${{...inpStyle, width:"100%", fontWeight:600, marginBottom:6}} />
+      <div style=${{display:"flex", gap:6}}>
+        <${LabeledMini} label="kg" value=${ex.weight} onChange=${v=>patch(i,"weight",+v||0)} />
+        <${LabeledMini} label="sets" value=${ex.sets} onChange=${v=>patch(i,"sets",+v||1)} />
+        <${LabeledMini} label="reps" value=${ex.reps} onChange=${v=>patch(i,"reps",v)} text=${true} />
+      </div>
+    <//>`)}
+
+    <button onClick=${reset} style=${{width:"100%", marginTop:16, padding:12, background:"none",
+      border:`1px solid ${C.red}`, borderRadius:8, color:C.red, fontFamily:FONT_HEAD,
+      textTransform:"uppercase", letterSpacing:1, fontSize:14, cursor:"pointer"}}>
+      Reset plan to defaults
+    </button>
+
+    <p style=${{fontSize:11, color:C.dim, marginTop:14, lineHeight:1.5}}>
+      Standing rules travel with the plan: 2s down 1s up · arms last · parallel squat depth for 8 weeks ·
+      external rotations before every upper session · no legs the day before bowling · bench only with pins or a spotter.
+    </p>
+  </div>`;
+}
+
+function LabeledMini({label, value, onChange, text}){
+  return html`<div style=${{flex:1}}>
+    <div style=${{fontSize:9, color:C.dim, textTransform:"uppercase", letterSpacing:1, marginBottom:3}}>${label}</div>
+    <input value=${value} inputMode=${text?"text":"decimal"} onChange=${e=>onChange(e.target.value)}
+      style=${{...inpStyle, width:"100%", padding:"8px 10px", fontFamily:FONT_HEAD, fontSize:17, fontWeight:600, textAlign:"center"}} />
+  </div>`;
+}
+
+/* ---------------- bits ---------------- */
+function Card({children, style}){
+  return html`<div style=${{background:C.panel, borderRadius:10, padding:14, border:`1px solid ${C.line}`, ...(style||{})}}>${children}</div>`;
+}
+function SectionLabel({children, style}){
+  return html`<div style=${{fontFamily:FONT_HEAD, fontSize:14, fontWeight:600, letterSpacing:1.5, textTransform:"uppercase", color:C.dim, ...(style||{})}}>${children}</div>`;
+}
+function Stat({label, value, sub, pct}){
+  return html`<div style=${{flex:1, background:C.panel, borderRadius:10, padding:12, border:`1px solid ${C.line}`}}>
+    <div style=${{fontSize:10, color:C.dim, textTransform:"uppercase", letterSpacing:1}}>${label}</div>
+    <div style=${{display:"flex", alignItems:"baseline", gap:4}}>
+      <span style=${{fontFamily:FONT_HEAD, fontSize:28, fontWeight:700, color:C.gold}}>${value}</span>
+      <span style=${{fontSize:11, color:C.dim}}>${sub}</span>
+    </div>
+    <div style=${{height:5, background:C.panel2, borderRadius:3, marginTop:6, overflow:"hidden"}}>
+      <div style=${{width:Math.min(100,(pct||0)*100)+"%", height:"100%", background:pct>=1?C.green:C.gold}}></div>
+    </div>
+  </div>`;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);
+
+/* ---------------- service worker ---------------- */
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+}
+</script>
+</body>
+</html>
